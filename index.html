@@ -2455,9 +2455,7 @@
     <div class="header">
       <svg class="leaf" viewBox="0 0 24 24" fill="none" stroke="var(--moss)" stroke-width="1.4"><path d="M4 20C4 12 9 4 20 4C20 14 13 20 4 20Z"/><path d="M5 19C9 14 13 10 19 5"/></svg>
       <h1>Wochenplaner</h1>
-      <button class="toggle-btn${reorderMode ? ' on' : ''}" id="reorder-toggle" onclick="toggleReorderMode()" style="margin-left:auto;">${reorderMode ? '      <svg class="leaf" viewBox="0 0 24 24" fill="none" stroke="var(--moss)" stroke-width="1.4"><path d="M4 20C4 12 9 4 20 4C20 14 13 20 4 20Z"/><path d="M5 19C9 14 13 10 19 5"/></svg>
- ✓' : '      <svg class="leaf" viewBox="0 0 24 24" fill="none" stroke="var(--moss)" stroke-width="1.4"><path d="M4 20C4 12 9 4 20 4C20 14 13 20 4 20Z"/><path d="M5 19C9 14 13 10 19 5"/></svg>
-'}</button>
+            <button class="toggle-btn${reorderMode ? ' on' : ''}" id="reorder-toggle" onclick="toggleReorderMode()" style="margin-left:auto;">${reorderMode ? 'Sortieren ✓' : 'Sortieren'}</button>
     </div>
     ${buildTabs()}
     ${content}
