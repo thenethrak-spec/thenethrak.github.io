@@ -26,7 +26,7 @@
     const SYMBOLS = ['•', '○', '–', '✓', '!', '✕', '›'];
     const WEATHER_LABELS = ['kein Eintrag', 'sonnig', 'bewölkt', 'Regen', 'Schnee', 'Gewitter'];
     const MONTH_NAMES = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
-    const APP_VERSION = '1.9.0';
+    const APP_VERSION = '1.9.1';
     const WEEKDAY_NAMES_FULL = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
     let currentPage = 'cover', weekOffset = 0, monthOffset = 0;
@@ -795,7 +795,12 @@
     /* ---- END MOOD TRACKER ---- */
 
     function addItem(cat) { mediaLog[cat].push({ text: '', year: currentYear() }); pendingFocusId = 'item-' + cat + '-' + (mediaLog[cat].length - 1); scheduleSaveMedia(); renderApp(); }
-    function deleteItem(cat, idx) { mediaLog[cat].splice(idx, 1); scheduleSaveMedia(); renderApp(); }
+    function deleteItem(cat, idx) {
+      const item = mediaLog[cat][idx];
+      const name = (item && item.text && item.text.trim()) ? item.text.trim() : 'diesen Eintrag';
+      if (!confirm(`„${name}" wirklich löschen?`)) return;
+      mediaLog[cat].splice(idx, 1); scheduleSaveMedia(); renderApp();
+    }
     function updateItem(cat, idx, v) { mediaLog[cat][idx].text = v; scheduleSaveMedia(); }
     function updateItemYear(cat, idx, v) { const y = parseInt(v, 10); mediaLog[cat][idx].year = isNaN(y) ? currentYear() : y; scheduleSaveMedia(); renderApp(); }
     function migrateBookToRead(idx) { const item = mediaLog.booksToRead.splice(idx, 1)[0]; mediaLog.booksRead.push(item); scheduleSaveMedia(); renderApp(); }
@@ -829,6 +834,9 @@
     function deleteCustomListItem(id, idx) {
       const list = mediaLog.customLists.find(l => l.id === id);
       if (!list) return;
+      const item = list.items[idx];
+      const name = (item && item.text && item.text.trim()) ? item.text.trim() : 'diesen Eintrag';
+      if (!confirm(`„${name}" wirklich löschen?`)) return;
       list.items.splice(idx, 1);
       scheduleSaveMedia(); renderApp();
     }
