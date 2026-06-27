@@ -26,7 +26,7 @@
     const SYMBOLS = ['•', '○', '–', '✓', '!', '✕', '›'];
     const WEATHER_LABELS = ['kein Eintrag', 'sonnig', 'bewölkt', 'Regen', 'Schnee', 'Gewitter'];
     const MONTH_NAMES = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
-    const APP_VERSION = '1.10.0';
+    const APP_VERSION = '1.11.0';
     const WEEKDAY_NAMES_FULL = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
     let currentPage = 'cover', weekOffset = 0, monthOffset = 0;
@@ -257,6 +257,7 @@
       await ensureMonthsForWeekLoaded();
       await ensureMonthLoaded(currentMonthId(0));
       await ensureMonthLoaded(currentMonthId(-1));
+      await ensureHeatmapWeeksLoaded();
       renderApp();
     }
 
@@ -973,30 +974,56 @@
       const dIdx = date.getDate() - 1;
       return mediaLog.habits.some(h => { const arr = m.marks[h.id]; return arr ? !!arr[dIdx] : false; });
     }
+    async function ensureWeekLoadedById(id) {
+      if (weekCache[id]) return;
+      try { const snap = await weekRefById(id).get(); weekCache[id] = (snap.exists && snap.data().payload) ? normalizeWeek(JSON.parse(snap.data().payload)) : defaultWeek(); }
+      catch (e) { weekCache[id] = defaultWeek(); }
+    }
+    async function ensureHeatmapWeeksLoaded() {
+      const ids = new Set();
+      for (let i = 0; i < 5; i++) { const d = new Date(); d.setDate(d.getDate() - i * 7); ids.add(weekDocIdForDate(d)); }
+      await Promise.all([...ids].map(ensureWeekLoadedById));
+    }
+    function dayHasEntry(date) {
+      const wId = weekDocIdForDate(date);
+      const w = weekCache[wId];
+      if (!w) return false;
+      const dk = WEEKDAYS[(date.getDay() + 6) % 7].key;
+      const arr = w.days[dk];
+      return Array.isArray(arr) && arr.length > 0;
+    }
+    function dayActivityLevel(date) {
+      let level = 0;
+      if (dayHasActiveHabit(date)) level++;
+      if (dayHasEntry(date)) level++;
+      return level;
+    }
     function computeStreak() {
-      if (!mediaLog.habits.length) return 0;
       let d = new Date();
-      if (!dayHasActiveHabit(d)) d.setDate(d.getDate() - 1);
+      if (dayActivityLevel(d) === 0) d.setDate(d.getDate() - 1);
       let streak = 0;
-      while (dayHasActiveHabit(d)) { streak++; d.setDate(d.getDate() - 1); }
+      while (dayActivityLevel(d) > 0) { streak++; d.setDate(d.getDate() - 1); }
       return streak;
     }
-    function streakStage(streak) {
-      if (streak >= 30) return 4;
-      if (streak >= 14) return 3;
-      if (streak >= 7) return 2;
-      if (streak >= 3) return 1;
-      return 0;
-    }
-    function growthIconHTML(stage) {
-      const c = 'var(--moss)';
-      const wrap = inner => `<svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="${c}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
-      const ground = '<line x1="5" y1="21" x2="19" y2="21"/>';
-      if (stage === 0) return wrap(ground + '<path d="M12 21v-5"/><path d="M12 17c-2-1-3-2.5-2-4.5"/>');
-      if (stage === 1) return wrap(ground + '<path d="M12 21v-9"/><path d="M12 14c-2-1-3-2.5-2-4.5"/><path d="M12 16c2-1 2.7-2.3 2.3-4"/>');
-      if (stage === 2) return wrap(ground + '<path d="M12 21V8"/><path d="M12 11c-2.3-1-3.6-2.8-2.7-5.4"/><path d="M12 14c2.3-1 3.6-2.8 2.7-5.4"/><path d="M12 17c-1.8-.6-3-1.8-2.6-3.6"/>');
-      if (stage === 3) return wrap(ground + `<path d="M12 21V6"/><path d="M12 9c-2.3-1-3.6-2.8-2.7-5.4"/><path d="M12 12c2.3-1 3.6-2.8 2.7-5.4"/><path d="M12 15c-1.8-.6-3-1.8-2.6-3.6"/><circle cx="12" cy="5" r="1.5" fill="${c}" stroke="none"/>`);
-      return wrap(`<path d="M5 19.5C5 12.5 9.5 5.5 19 5.5C19 14.5 13 19.5 5 19.5Z"/><path d="M6 18.5C9.5 14 13 10.5 18 6"/><circle cx="18" cy="6" r="1.6" fill="${c}" stroke="none"/>`);
+    function heatmapHTML() {
+      const cell = 11, gap = 3, pad = 2;
+      const width = pad * 2 + 7 * cell + 6 * gap, height = pad * 2 + 5 * cell + 4 * gap;
+      let rects = '';
+      for (let row = 0; row < 5; row++) {
+        const weeksAgo = 4 - row;
+        const today = new Date();
+        const dow = today.getDay() || 7;
+        const monday = new Date(today); monday.setHours(0, 0, 0, 0); monday.setDate(monday.getDate() - (dow - 1) - weeksAgo * 7);
+        for (let col = 0; col < 7; col++) {
+          const cellDate = new Date(monday); cellDate.setDate(monday.getDate() + col);
+          const level = dayActivityLevel(cellDate);
+          const x = pad + col * (cell + gap), y = pad + row * (cell + gap);
+          const fill = level === 0 ? 'none' : level === 1 ? 'rgba(91,122,92,0.4)' : 'var(--moss)';
+          const stroke = level === 0 ? ' stroke="var(--rule-strong)"' : '';
+          rects += `<rect x="${x}" y="${y}" width="${cell}" height="${cell}" rx="2" fill="${fill}"${stroke}/>`;
+        }
+      }
+      return `<svg viewBox="0 0 ${width} ${height}" width="${Math.round(width * 1.7)}" height="${Math.round(height * 1.7)}">${rects}</svg>`;
     }
 
     function buildCoverPage() {
@@ -1007,12 +1034,15 @@
       const done = mediaLog.habits.filter(h => getMark(mId, h.id, dIdx)).length;
       const quote = pickDailyQuote();
       const streak = computeStreak();
-      const stage = streakStage(streak);
-      const streakLabel = streak === 0 ? 'Heute starten' : streak === 1 ? '1 Tag in Folge' : `${streak} Tage in Folge`;
+      const streakLabel = streak === 0 ? 'Heute starten' : streak === 1 ? '1 Tag in Folge aktiv' : `${streak} Tage in Folge aktiv`;
       return `
     <div class="cover">
       <div class="cover-date">${dateStr}</div>
-      ${total > 0 ? `<div class="cover-growth" title="${streak} Tag${streak === 1 ? '' : 'e'} in Folge">${growthIconHTML(stage)}<div class="cover-growth-label">${streakLabel}</div></div>` : ''}
+      <div class="cover-heatmap">
+        <div class="cover-heatmap-label">${streakLabel}</div>
+        ${heatmapHTML()}
+        <div class="cover-heatmap-caption">letzte 5 Wochen · Habit oder Tageszeile</div>
+      </div>
       ${quote ? `<blockquote class="cover-quote">${escapeHtml(quote.text)}</blockquote>` : `<p class="cover-empty">Noch keine Zitate gespeichert — trag eines im Tab „Zitate &amp; Achievements" ein.</p>`}
       ${total > 0 ? `<div class="cover-habit-status">${done} von ${total} Gewohnheiten heute erledigt</div>` : ''}
       <div class="cover-nav">
@@ -1308,7 +1338,6 @@
       </div>
       <button class="toggle-btn${darkMode ? ' on' : ''}" onclick="toggleDarkMode()" aria-pressed="${darkMode}">${darkMode ? 'Dunkel' : 'Hell'}</button>
     </div>
-    <div class="settings-divider"></div>
     <div class="settings-row">
       <div>
         <div class="settings-row-title">Jahresleiste</div>
@@ -1316,7 +1345,6 @@
       </div>
       <button class="toggle-btn${yearBarEnabled ? ' on' : ''}" onclick="toggleYearBar()" aria-pressed="${yearBarEnabled}">${yearBarEnabled ? 'Ein' : 'Aus'}</button>
     </div>
-    <div class="settings-divider"></div>
     <div class="settings-row">
       <div>
         <div class="settings-row-title">Textfeld-Größen</div>
@@ -1324,7 +1352,6 @@
       </div>
       <button class="toggle-btn" onclick="resetTextareaSizes()">Zurücksetzen</button>
     </div>
-    <div class="settings-divider"></div>
     <div class="settings-row">
       <div>
         <div class="settings-row-title">Keys</div>
